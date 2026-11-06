@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "ST10291856CLDV7112Practicum.Functions": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7290",
+      "launchBrowser": false
+    }
+  }
+}
