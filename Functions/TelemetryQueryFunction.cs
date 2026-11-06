@@ -13,6 +13,7 @@ public class TelemetryQueryFunction
     public TelemetryQueryFunction(TableServiceClient ts, IConfiguration cfg)
     {
         _table = ts.GetTableClient(cfg["TelemetryTableName"] ?? "TelemetryReadings");
+        _table.CreateIfNotExists();   // creates the table if it's missing
     }
 
     [Function("TelemetryQuery")]
@@ -23,16 +24,26 @@ public class TelemetryQueryFunction
         CancellationToken ct)
     {
         var results = new List<object>();
-        await foreach (var e in _table.QueryAsync<TableEntity>(
-            f => f.PartitionKey == sensorId, maxPerPage: 50, cancellationToken: ct))
+
+        try
         {
-            results.Add(new
+            await foreach (var e in _table.QueryAsync<TableEntity>(
+                f => f.PartitionKey == sensorId, maxPerPage: 50, cancellationToken: ct))
             {
-                PartitionKey = e.PartitionKey,
-                ReadingTimestamp = e.GetDateTimeOffset("ReadingTimestamp"),
-                MoisturePercent = e.GetDouble("MoisturePercent"),
-                TemperatureCelsius = e.GetDouble("TemperatureCelsius")
-            });
+                results.Add(new
+                {
+                    PartitionKey = e.PartitionKey,
+                    ReadingTimestamp = e.TryGetValue("ReadingTimestamp", out var t) ? t : null,
+                    MoisturePercent = e.TryGetValue("MoisturePercent", out var m) ? m : null,
+                    TemperatureCelsius = e.TryGetValue("TemperatureCelsius", out var tc) ? tc : null
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            var err = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await err.WriteStringAsync($"{ex.GetType().Name}: {ex.Message}");
+            return err;
         }
 
         var ok = req.CreateResponse(HttpStatusCode.OK);
